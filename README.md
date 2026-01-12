@@ -1,8 +1,6 @@
 <p align="center">
   <img src="assets/cognitoad.png" alt="Cognitoad mascot" width="300">
 </p>
-
-<h1 align="center">Cognitoad 🐸</h1>
 <p align="center">
 A Burp Suite extension that provides a comprehensive GUI for making AWS Cognito API requests and testing user attribute updates.
 </p>

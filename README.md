@@ -91,10 +91,33 @@ CogniToad integrates with Burp Suite's Montoya API to provide a seamless interfa
 
 ### Using Context Menus
 
-1. In Burp Suite's HTTP History, Proxy, or Repeater, right-click on a request or response
-2. Select from the context menu:
-   - **Send access token to CogniToad extension** - Extracts and sends the token to the extension
-   - **Send user attributes to CogniToad extension** - Extracts and populates the repeater with attributes
+The extension adds context menu items that allow you to quickly extract and send data from HTTP requests/responses directly to CogniToad.
+
+#### Sending Access Token to the Extension
+
+1. Navigate to **Proxy > HTTP history** (or **HTTP History** tab, or **Repeater**)
+2. Find the HTTP request or response that contains an access token (typically a response from an authentication endpoint)
+3. Right-click on the request/response entry in the list
+4. Select **Send access token to CogniToad extension** from the context menu
+5. The access token will be automatically extracted and populated in the "Access Token" field of the CogniToad tab
+6. Open the **CogniToad** tab to verify the token has been set
+
+**Note:** The extension automatically detects access tokens in:
+- JSON response bodies (looks for `accessToken`, `access_token`, or `token` fields)
+- `Authorization: Bearer` headers in requests or responses
+
+#### Sending User Attributes to the Extension
+
+1. Navigate to **Proxy > HTTP history** (or **HTTP History** tab)
+2. Find an HTTP response that contains user attributes (typically a response from a user information endpoint)
+3. Right-click on the response entry in the list
+4. Select **Send user attributes to CogniToad extension** from the context menu
+5. The user attributes will be automatically extracted and populated in the repeater
+6. Navigate to the **CogniToad** tab > **Update Attributes Repeater** tab to see the extracted attributes
+
+**Note:** The extension automatically extracts attributes from:
+- AWS Cognito `UserAttributes` format (arrays of `Name`/`Value` pairs)
+- Generic JSON key-value pairs (excluding token/metadata fields)
 
 ## Notes
 

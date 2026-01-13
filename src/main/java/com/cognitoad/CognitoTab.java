@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.nio.charset.StandardCharsets;
 
 public class CognitoTab {
     private final MontoyaApi montoyaApi;
@@ -31,6 +32,16 @@ public class CognitoTab {
     private volatile boolean isRunning = false;
     private volatile boolean isBruteForcing = false;
     private IdentityPoolTestPanel identityPoolTestPanel;
+    private JTextArea jwtTokenArea;
+    private JTextArea jwtDecodedArea;
+    private JTextField clientIdField;
+    private JTextField emailField;
+    private JTextField passwordField;
+    private JRadioButton forceAliasCreationYes;
+    private JRadioButton forceAliasCreationNo;
+    private JTextArea signUpResultArea;
+    private JTextArea collaboratorInteractionsArea;
+    private Object collaboratorClient; // Store the CollaboratorClient instance
     
     private static final String[] AWS_REGIONS = {
         "us-east-1",      // US East (N. Virginia)
@@ -165,6 +176,10 @@ public class CognitoTab {
         JPanel identityPoolTestTab = createIdentityPoolTestPanel();
         tabbedPane.addTab("Identity Pool Tester", identityPoolTestTab);
         
+        // Tab 4: JWT Decoder & Sign-Up Tester
+        JPanel jwtDecoderTab = createJwtDecoderPanel();
+        tabbedPane.addTab("JWT Decoder & Sign-Up Tester", jwtDecoderTab);
+        
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
     }
     
@@ -273,7 +288,7 @@ public class CognitoTab {
         // Instructions
         JPanel instructionPanel = new JPanel(new BorderLayout());
         JLabel instructionLabel = new JLabel(
-            "Enter keys (attribute names) and values in separate lists (one per line).<br>" +
+            "Enter keys (attribute names) and values in separate lists (one per line)." +
             "All combinations of keys x values will be tested. Example: 3 keys x 2 values = 6 combinations."
         );
         instructionLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
@@ -1064,6 +1079,719 @@ public class CognitoTab {
                     .replace("\n", "\\n")
                     .replace("\r", "\\r")
                     .replace("\t", "\\t");
+    }
+    
+    private JPanel createJwtDecoderPanel() {
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        
+        // Top panel: JWT input and decode
+        JPanel topPanel = new JPanel(new BorderLayout());
+        
+        // JWT Input panel
+        JPanel jwtInputPanel = new JPanel(new BorderLayout());
+        jwtInputPanel.setBorder(new TitledBorder("JWT Token"));
+        jwtTokenArea = new JTextArea(5, 60);
+        jwtTokenArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        jwtTokenArea.setLineWrap(true);
+        jwtTokenArea.setWrapStyleWord(true);
+        JScrollPane jwtInputScroll = new JScrollPane(jwtTokenArea);
+        jwtInputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        jwtInputScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        jwtInputPanel.add(jwtInputScroll, BorderLayout.CENTER);
+        
+        JPanel jwtButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton decodeButton = new JButton("Decode JWT");
+        decodeButton.addActionListener(e -> decodeJwtToken());
+        jwtButtonPanel.add(decodeButton);
+        jwtInputPanel.add(jwtButtonPanel, BorderLayout.SOUTH);
+        
+        // Decoded JWT panel
+        JPanel decodedPanel = new JPanel(new BorderLayout());
+        decodedPanel.setBorder(new TitledBorder("Decoded Payload"));
+        jwtDecodedArea = new JTextArea(10, 60);
+        jwtDecodedArea.setEditable(false);
+        jwtDecodedArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane decodedScroll = new JScrollPane(jwtDecodedArea);
+        decodedScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        decodedScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        decodedPanel.add(decodedScroll, BorderLayout.CENTER);
+        
+        JSplitPane topSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, jwtInputPanel, decodedPanel);
+        topSplit.setResizeWeight(0.4);
+        topSplit.setDividerLocation(200);
+        topPanel.add(topSplit, BorderLayout.CENTER);
+        
+        // Bottom panel: Sign-Up Test
+        JPanel signUpPanel = new JPanel(new BorderLayout());
+        signUpPanel.setBorder(new TitledBorder("Sign-Up Test"));
+        
+        // Configuration panel
+        JPanel configPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        configPanel.add(new JLabel("Client ID:"), gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        clientIdField = new JTextField(40);
+        clientIdField.setEditable(true);
+        configPanel.add(clientIdField, gbc);
+        
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        configPanel.add(new JLabel("Email/Username:"), gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        emailField = new JTextField(40);
+        emailField.setEditable(true);
+        emailField.setText("cog_test@example.com");
+        emailField.setToolTipText("Enter email address. You can include a Collaborator payload (e.g., test@payload.burpcollaborator.net)");
+        configPanel.add(emailField, gbc);
+        
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        configPanel.add(new JLabel("Password:"), gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        passwordField = new JTextField(40);
+        passwordField.setEditable(true);
+        passwordField.setText("SuperSecure-123");
+        passwordField.setToolTipText("Enter password for sign-up test");
+        configPanel.add(passwordField, gbc);
+        
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        configPanel.add(new JLabel("Force Alias Creation:"), gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        JPanel forceAliasPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        ButtonGroup forceAliasGroup = new ButtonGroup();
+        forceAliasCreationYes = new JRadioButton("Yes", false);
+        forceAliasCreationNo = new JRadioButton("No", true);
+        forceAliasGroup.add(forceAliasCreationYes);
+        forceAliasGroup.add(forceAliasCreationNo);
+        forceAliasPanel.add(forceAliasCreationYes);
+        forceAliasPanel.add(forceAliasCreationNo);
+        forceAliasPanel.setToolTipText("If enabled, forces alias creation even if an alias with the same value already exists");
+        configPanel.add(forceAliasPanel, gbc);
+        
+        // Buttons panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        
+        // Test Sign-Up button (most important - make it bigger and first)
+        JButton testSignUpButton = new JButton("Test Sign-Up");
+        testSignUpButton.setFont(testSignUpButton.getFont().deriveFont(Font.BOLD, testSignUpButton.getFont().getSize() + 1));
+        testSignUpButton.setPreferredSize(new Dimension(testSignUpButton.getPreferredSize().width + 20, testSignUpButton.getPreferredSize().height + 5));
+        testSignUpButton.addActionListener(e -> testSignUp());
+        buttonPanel.add(testSignUpButton);
+        
+        JButton generateCollaboratorButton = new JButton("Generate Collaborator Payload");
+        generateCollaboratorButton.addActionListener(e -> {
+            String payload = generateCollaboratorPayloadForEmail();
+            if (payload != null && !payload.isEmpty()) {
+                String currentEmail = emailField.getText().trim();
+                if (currentEmail.isEmpty()) {
+                    emailField.setText("test@" + payload);
+                } else if (currentEmail.contains("@")) {
+                    // Replace domain with Collaborator payload
+                    int atIndex = currentEmail.indexOf("@");
+                    emailField.setText(currentEmail.substring(0, atIndex) + "@" + payload);
+                } else {
+                    // Append @payload
+                    emailField.setText(currentEmail + "@" + payload);
+                }
+            }
+        });
+        buttonPanel.add(generateCollaboratorButton);
+        
+        JButton checkInteractionsButton = new JButton("Check Collaborator Interactions");
+        checkInteractionsButton.addActionListener(e -> checkCollaboratorInteractions());
+        buttonPanel.add(checkInteractionsButton);
+        
+        JButton requestOtpButton = new JButton("Request OTP/Confirmation Code");
+        requestOtpButton.addActionListener(e -> requestOtp());
+        buttonPanel.add(requestOtpButton);
+        
+        // Result area
+        JPanel resultPanel = new JPanel(new BorderLayout());
+        resultPanel.setBorder(new TitledBorder("Sign-Up Result"));
+        signUpResultArea = new JTextArea(8, 60);
+        signUpResultArea.setEditable(false);
+        signUpResultArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane resultScroll = new JScrollPane(signUpResultArea);
+        resultScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        resultScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        resultPanel.add(resultScroll, BorderLayout.CENTER);
+        
+        // Collaborator Interactions area
+        JPanel interactionsPanel = new JPanel(new BorderLayout());
+        interactionsPanel.setBorder(new TitledBorder("Collaborator Interactions"));
+        collaboratorInteractionsArea = new JTextArea(8, 60);
+        collaboratorInteractionsArea.setEditable(false);
+        collaboratorInteractionsArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane interactionsScroll = new JScrollPane(collaboratorInteractionsArea);
+        interactionsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        interactionsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        interactionsPanel.add(interactionsScroll, BorderLayout.CENTER);
+        
+        // Combine result and interactions in a split pane
+        JSplitPane resultSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, resultPanel, interactionsPanel);
+        resultSplit.setResizeWeight(0.5);
+        resultSplit.setDividerLocation(200);
+        
+        JPanel signUpConfigPanel = new JPanel(new BorderLayout());
+        signUpConfigPanel.add(configPanel, BorderLayout.CENTER);
+        signUpConfigPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        JSplitPane signUpSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, signUpConfigPanel, resultSplit);
+        signUpSplit.setResizeWeight(0.3);
+        signUpSplit.setDividerLocation(150);
+        signUpPanel.add(signUpSplit, BorderLayout.CENTER);
+        
+        JSplitPane mainSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topPanel, signUpPanel);
+        mainSplit.setResizeWeight(0.5);
+        mainSplit.setDividerLocation(400);
+        mainPanel.add(mainSplit, BorderLayout.CENTER);
+        
+        return mainPanel;
+    }
+    
+    private void decodeJwtToken() {
+        String jwtToken = jwtTokenArea.getText().trim();
+        
+        if (jwtToken.isEmpty()) {
+            JOptionPane.showMessageDialog(mainPanel, "Please enter a JWT token", 
+                "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        try {
+            // JWT tokens have 3 parts separated by dots: header.payload.signature
+            String[] parts = jwtToken.split("\\.");
+            if (parts.length != 3) {
+                throw new IllegalArgumentException("Invalid JWT format. Expected 3 parts separated by dots.");
+            }
+            
+            // Decode the payload (second part)
+            String payload = parts[1];
+            String decodedPayload = decodeBase64Url(payload);
+            
+            // Format JSON if possible
+            String formattedPayload = formatJson(decodedPayload);
+            
+            // Display decoded payload
+            jwtDecodedArea.setText(formattedPayload);
+            
+            // Try to extract client_id from the payload
+            extractClientIdFromPayload(decodedPayload);
+            
+        } catch (Exception e) {
+            jwtDecodedArea.setText("Error decoding JWT: " + e.getMessage());
+            montoyaApi.logging().logToError("Error decoding JWT: " + e.getMessage());
+        }
+    }
+    
+    private String decodeBase64Url(String base64Url) {
+        // Base64URL uses - and _ instead of + and /, and no padding
+        String base64 = base64Url.replace('-', '+').replace('_', '/');
+        
+        // Add padding if needed
+        switch (base64.length() % 4) {
+            case 2:
+                base64 += "==";
+                break;
+            case 3:
+                base64 += "=";
+                break;
+        }
+        
+        byte[] decoded = java.util.Base64.getDecoder().decode(base64);
+        return new String(decoded, StandardCharsets.UTF_8);
+    }
+    
+    private void extractClientIdFromPayload(String payload) {
+        try {
+            // Try to find client_id in the JSON payload
+            // Look for patterns like "client_id":"..." or "clientId":"..."
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "\"(?:client_id|clientId)\"\\s*:\\s*\"([^\"]+)\"", 
+                java.util.regex.Pattern.CASE_INSENSITIVE
+            );
+            java.util.regex.Matcher matcher = pattern.matcher(payload);
+            
+            if (matcher.find()) {
+                String clientId = matcher.group(1);
+                clientIdField.setText(clientId);
+                montoyaApi.logging().logToOutput("Extracted client_id: " + clientId);
+            } else {
+                montoyaApi.logging().logToOutput("No client_id found in JWT payload");
+            }
+        } catch (Exception e) {
+            montoyaApi.logging().logToError("Error extracting client_id: " + e.getMessage());
+        }
+    }
+    
+    private String generateCollaboratorPayloadForEmail() {
+        try {
+            // Use Burp's Montoya Collaborator API via reflection
+            // The API structure: collaborator().createClient().generatePayload(PayloadOption...)
+            String payloadString = null;
+            
+            Object collaborator = montoyaApi.collaborator();
+            
+            // Debug: Log all available methods on the Collaborator interface
+            java.lang.reflect.Method[] collaboratorMethods = collaborator.getClass().getMethods();
+            StringBuilder methodList = new StringBuilder("Available Collaborator methods: ");
+            for (java.lang.reflect.Method method : collaboratorMethods) {
+                methodList.append(method.getName()).append("(");
+                Class<?>[] params = method.getParameterTypes();
+                for (int i = 0; i < params.length; i++) {
+                    if (i > 0) methodList.append(", ");
+                    methodList.append(params[i].getSimpleName());
+                }
+                methodList.append("), ");
+            }
+            montoyaApi.logging().logToOutput(methodList.toString());
+            
+            // Step 1: Create a client using createClient() method
+            // According to Montoya API docs: Collaborator.createClient() returns CollaboratorClient
+            Object clientContext = null;
+            
+            try {
+                // Try the correct method name: createClient()
+                java.lang.reflect.Method createClientMethod = collaborator.getClass().getMethod("createClient");
+                clientContext = createClientMethod.invoke(collaborator);
+                if (clientContext != null) {
+                    montoyaApi.logging().logToOutput("Created Collaborator client using createClient()");
+                }
+            } catch (NoSuchMethodException e) {
+                // Fallback: try searching for methods with "client" in the name
+                for (java.lang.reflect.Method method : collaboratorMethods) {
+                    String methodName = method.getName().toLowerCase();
+                    if (methodName.contains("client") && method.getParameterCount() == 0) {
+                        try {
+                            Object result = method.invoke(collaborator);
+                            if (result != null) {
+                                // Check if the result has generatePayload method (CollaboratorClient interface)
+                                java.lang.reflect.Method[] resultMethods = result.getClass().getMethods();
+                                for (java.lang.reflect.Method resultMethod : resultMethods) {
+                                    if (resultMethod.getName().equals("generatePayload")) {
+                                        clientContext = result;
+                                        montoyaApi.logging().logToOutput("Found client using method: " + method.getName());
+                                        break;
+                                    }
+                                }
+                                if (clientContext != null) break;
+                            }
+                        } catch (Exception ex) {
+                            continue;
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                montoyaApi.logging().logToError("Error creating Collaborator client: " + ex.getMessage());
+                throw new Exception("Could not create Collaborator client: " + ex.getMessage(), ex);
+            }
+            
+            if (clientContext == null) {
+                throw new Exception("Could not create Collaborator client. Available methods: " + 
+                    java.util.Arrays.toString(java.util.Arrays.stream(collaboratorMethods)
+                        .map(m -> m.getName())
+                        .toArray(String[]::new)));
+            }
+            
+            // Store the client for later use in checking interactions
+            collaboratorClient = clientContext;
+            
+            // Step 2: Generate payload from the client
+            // According to docs: generatePayload(PayloadOption... options)
+            // Varargs in reflection need to be passed as an array
+            java.lang.reflect.Method[] contextMethods = clientContext.getClass().getMethods();
+            
+            // Find generatePayload method - it takes varargs PayloadOption
+            java.lang.reflect.Method generatePayloadMethod = null;
+            for (java.lang.reflect.Method method : contextMethods) {
+                if (method.getName().equals("generatePayload")) {
+                    Class<?>[] paramTypes = method.getParameterTypes();
+                    // Varargs methods have the last parameter as an array
+                    // We want the version with PayloadOption... (varargs)
+                    if (paramTypes.length == 1 && paramTypes[0].isArray()) {
+                        generatePayloadMethod = method;
+                        montoyaApi.logging().logToOutput("Found generatePayload method with varargs: " + paramTypes[0].getComponentType().getName());
+                        break;
+                    } else if (paramTypes.length == 0) {
+                        // Also try the no-args version if it exists
+                        generatePayloadMethod = method;
+                        montoyaApi.logging().logToOutput("Found generatePayload method with no args");
+                        break;
+                    }
+                }
+            }
+            
+            if (generatePayloadMethod == null) {
+                throw new Exception("Could not find generatePayload method on CollaboratorClient");
+            }
+            
+            // Call generatePayload() with empty varargs array
+            // For varargs methods in reflection, we need to pass an array even if empty
+            try {
+                Class<?>[] paramTypes = generatePayloadMethod.getParameterTypes();
+                Object payload = null;
+                
+                if (paramTypes.length == 1 && paramTypes[0].isArray()) {
+                    // Varargs method - pass empty array of the component type
+                    Class<?> componentType = paramTypes[0].getComponentType();
+                    Object emptyArray = java.lang.reflect.Array.newInstance(componentType, 0);
+                    payload = generatePayloadMethod.invoke(clientContext, emptyArray);
+                    montoyaApi.logging().logToOutput("Called generatePayload with empty " + componentType.getSimpleName() + " array");
+                } else if (paramTypes.length == 0) {
+                    // No args method
+                    payload = generatePayloadMethod.invoke(clientContext);
+                    montoyaApi.logging().logToOutput("Called generatePayload with no args");
+                } else {
+                    throw new Exception("Unexpected generatePayload signature");
+                }
+                
+                if (payload != null) {
+                    payloadString = payload.toString();
+                    if (payloadString.isEmpty()) {
+                        throw new Exception("generatePayload returned empty string");
+                    }
+                    montoyaApi.logging().logToOutput("Successfully generated Collaborator payload: " + payloadString);
+                } else {
+                    throw new Exception("generatePayload returned null");
+                }
+            } catch (Exception ex) {
+                montoyaApi.logging().logToError("Error calling generatePayload: " + ex.getMessage());
+                ex.printStackTrace();
+                throw new Exception("Failed to generate payload: " + ex.getMessage(), ex);
+            }
+            
+            if (payloadString == null || payloadString.isEmpty()) {
+                throw new Exception("Could not generate Collaborator payload. Available context methods: " + 
+                    java.util.Arrays.toString(java.util.Arrays.stream(contextMethods)
+                        .map(m -> m.getName())
+                        .toArray(String[]::new)));
+            }
+            
+            return payloadString;
+            
+        } catch (Exception e) {
+            // If all methods fail, show error and let user enter manually
+            montoyaApi.logging().logToError("Error generating Collaborator payload: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(mainPanel, 
+                "Error generating Burp Collaborator payload: " + e.getMessage() + "\n\n" +
+                "You can generate one from Burp Suite's Collaborator tab (Project options > Misc > Burp Collaborator Server).",
+                "Error", JOptionPane.ERROR_MESSAGE);
+            return null;
+        }
+    }
+    
+    private void checkCollaboratorInteractions() {
+        if (collaboratorClient == null) {
+            JOptionPane.showMessageDialog(mainPanel, 
+                "No Collaborator client available. Please generate a Collaborator payload first.",
+                "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        try {
+            // Use reflection to call getAllInteractions() on the CollaboratorClient
+            java.lang.reflect.Method getAllInteractionsMethod = null;
+            java.lang.reflect.Method[] methods = collaboratorClient.getClass().getMethods();
+            
+            for (java.lang.reflect.Method method : methods) {
+                if (method.getName().equals("getAllInteractions") && method.getParameterCount() == 0) {
+                    getAllInteractionsMethod = method;
+                    break;
+                }
+            }
+            
+            if (getAllInteractionsMethod == null) {
+                throw new Exception("Could not find getAllInteractions method");
+            }
+            
+            // Call getAllInteractions()
+            Object interactionsObj = getAllInteractionsMethod.invoke(collaboratorClient);
+            
+            if (interactionsObj == null) {
+                collaboratorInteractionsArea.setText("No interactions found (returned null)");
+                return;
+            }
+            
+            // The result should be a List<Interaction>
+            if (interactionsObj instanceof java.util.List) {
+                java.util.List<?> interactions = (java.util.List<?>) interactionsObj;
+                
+                if (interactions.isEmpty()) {
+                    collaboratorInteractionsArea.setText("No interactions found yet.\n\n" +
+                        "Interactions will appear here when the Collaborator payload receives callbacks.\n" +
+                        "This can happen when:\n" +
+                        "- AWS Cognito sends verification emails\n" +
+                        "- AWS Cognito makes outbound requests\n" +
+                        "- Any service tries to access the Collaborator payload");
+                } else {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Found ").append(interactions.size()).append(" interaction(s):\n\n");
+                    
+                    for (int i = 0; i < interactions.size(); i++) {
+                        Object interaction = interactions.get(i);
+                        sb.append("=== Interaction ").append(i + 1).append(" ===\n");
+                        
+                        // Try to extract information from the interaction object
+                        try {
+                            // Get all methods on the interaction to find useful ones
+                            java.lang.reflect.Method[] interactionMethods = interaction.getClass().getMethods();
+                            for (java.lang.reflect.Method method : interactionMethods) {
+                                String methodName = method.getName().toLowerCase();
+                                if ((methodName.contains("type") || methodName.contains("protocol") ||
+                                     methodName.contains("client") || methodName.contains("time") ||
+                                     methodName.contains("request") || methodName.contains("response")) &&
+                                    method.getParameterCount() == 0) {
+                                    try {
+                                        Object value = method.invoke(interaction);
+                                        if (value != null) {
+                                            sb.append(method.getName()).append(": ").append(value.toString()).append("\n");
+                                        }
+                                    } catch (Exception ex) {
+                                        // Skip methods that fail
+                                    }
+                                }
+                            }
+                            
+                            // Also try toString() which might have useful info
+                            sb.append("Details: ").append(interaction.toString()).append("\n");
+                        } catch (Exception ex) {
+                            sb.append("Error extracting interaction details: ").append(ex.getMessage()).append("\n");
+                            sb.append("Raw: ").append(interaction.toString()).append("\n");
+                        }
+                        
+                        sb.append("\n");
+                    }
+                    
+                    collaboratorInteractionsArea.setText(sb.toString());
+                    montoyaApi.logging().logToOutput("Found " + interactions.size() + " Collaborator interaction(s)");
+                }
+            } else {
+                collaboratorInteractionsArea.setText("Unexpected return type: " + interactionsObj.getClass().getName() + "\n" +
+                    "Value: " + interactionsObj.toString());
+            }
+            
+        } catch (Exception e) {
+            montoyaApi.logging().logToError("Error checking Collaborator interactions: " + e.getMessage());
+            e.printStackTrace();
+            collaboratorInteractionsArea.setText("Error checking interactions: " + e.getMessage());
+            JOptionPane.showMessageDialog(mainPanel, 
+                "Error checking Collaborator interactions: " + e.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private void testSignUp() {
+        try {
+            if (isRunning) {
+                montoyaApi.logging().logToError("Operation already in progress");
+                JOptionPane.showMessageDialog(mainPanel, "Operation already in progress. Please wait.", 
+                    "Info", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            
+            String clientId = clientIdField.getText().trim();
+            String email = emailField.getText().trim();
+            String password = passwordField.getText().trim();
+            String region = (String) regionComboBox.getSelectedItem();
+            
+            if (clientId.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "Please enter a client ID", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            if (email.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "Please enter an email/username", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            if (password.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "Please enter a password", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            // Use email as username directly
+            final String username = email;
+            // Check if radio buttons are initialized, default to false if not
+            boolean forceAliasCreationValue = false;
+            try {
+                if (forceAliasCreationYes != null) {
+                    forceAliasCreationValue = forceAliasCreationYes.isSelected();
+                }
+            } catch (Exception e) {
+                montoyaApi.logging().logToError("Error reading ForceAliasCreation setting: " + e.getMessage());
+                forceAliasCreationValue = false;
+            }
+            final boolean forceAliasCreation = forceAliasCreationValue;
+            
+            final String finalClientId = clientId;
+            final String finalPassword = password;
+            final String finalRegion = region;
+            
+            isRunning = true;
+            signUpResultArea.setText("Testing sign-up with:\n" +
+                "  Client ID: " + finalClientId + "\n" +
+                "  Username: " + username + "\n" +
+                "  Password: " + (finalPassword.length() > 0 ? "***" : "(empty)") + "\n" +
+                "  Force Alias Creation: " + (forceAliasCreation ? "Yes" : "No") + "\n" +
+                "  Region: " + finalRegion + "\n\n" +
+                "Sending request...\n");
+            
+            montoyaApi.logging().logToOutput("Starting sign-up test: ClientId=" + finalClientId + ", Username=" + username + ", Region=" + finalRegion + ", ForceAliasCreation=" + forceAliasCreation);
+            
+            // Execute in background thread
+            new Thread(() -> {
+                try {
+                    String result = cognitoClient.signUp(finalClientId, username, finalPassword, finalRegion, forceAliasCreation);
+                    SwingUtilities.invokeLater(() -> {
+                        signUpResultArea.setText(result);
+                        isRunning = false;
+                        montoyaApi.logging().logToOutput("Sign-up test completed successfully");
+                    });
+                } catch (Exception e) {
+                    SwingUtilities.invokeLater(() -> {
+                        signUpResultArea.setText("Error: " + e.getMessage() + "\n\nStack trace:\n" + 
+                            getStackTrace(e));
+                        isRunning = false;
+                    });
+                    montoyaApi.logging().logToError("Error testing sign-up: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }).start();
+        } catch (Exception e) {
+            montoyaApi.logging().logToError("Error in testSignUp method: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(mainPanel, 
+                "Error: " + e.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
+            isRunning = false;
+        }
+    }
+    
+    private void requestOtp() {
+        if (isRunning) {
+            montoyaApi.logging().logToError("Operation already in progress");
+            JOptionPane.showMessageDialog(mainPanel, "Operation already in progress. Please wait.", 
+                "Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        
+        try {
+            String clientId = clientIdField.getText().trim();
+            String email = emailField.getText().trim();
+            String region = (String) regionComboBox.getSelectedItem();
+            
+            if (clientId.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "Please enter a client ID", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            if (email.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "Please enter an email/username", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            final String username = email;
+            final String finalClientId = clientId;
+            final String finalRegion = region;
+            
+            isRunning = true;
+            signUpResultArea.setText("Requesting OTP/Confirmation Code with:\n" +
+                "  Client ID: " + finalClientId + "\n" +
+                "  Username: " + username + "\n" +
+                "  Region: " + finalRegion + "\n\n" +
+                "Sending request...\n");
+            
+            montoyaApi.logging().logToOutput("Requesting OTP: ClientId=" + finalClientId + ", Username=" + username + ", Region=" + finalRegion);
+            
+            // Execute in background thread
+            new Thread(() -> {
+                try {
+                    String result = cognitoClient.resendConfirmationCode(finalClientId, username, finalRegion);
+                    SwingUtilities.invokeLater(() -> {
+                        signUpResultArea.setText(result);
+                        isRunning = false;
+                        montoyaApi.logging().logToOutput("OTP request completed successfully");
+                    });
+                } catch (Exception e) {
+                    SwingUtilities.invokeLater(() -> {
+                        signUpResultArea.setText("Error: " + e.getMessage() + "\n\nStack trace:\n" + 
+                            getStackTrace(e));
+                        isRunning = false;
+                    });
+                    montoyaApi.logging().logToError("Error requesting OTP: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }).start();
+        } catch (Exception e) {
+            montoyaApi.logging().logToError("Error in requestOtp method: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(mainPanel, 
+                "Error: " + e.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
+            isRunning = false;
+        }
+    }
+    
+    private String formatJson(String json) {
+        // Simple JSON formatting (indentation)
+        StringBuilder formatted = new StringBuilder();
+        int indent = 0;
+        boolean inString = false;
+        
+        for (char c : json.toCharArray()) {
+            if (c == '"' && (formatted.length() == 0 || formatted.charAt(formatted.length() - 1) != '\\')) {
+                inString = !inString;
+                formatted.append(c);
+            } else if (!inString) {
+                if (c == '{' || c == '[') {
+                    formatted.append(c).append("\n");
+                    indent++;
+                    formatted.append("  ".repeat(indent));
+                } else if (c == '}' || c == ']') {
+                    formatted.append("\n");
+                    indent--;
+                    formatted.append("  ".repeat(indent));
+                    formatted.append(c);
+                } else if (c == ',') {
+                    formatted.append(c).append("\n");
+                    formatted.append("  ".repeat(indent));
+                } else if (c == ':') {
+                    formatted.append(c).append(" ");
+                } else if (!Character.isWhitespace(c)) {
+                    formatted.append(c);
+                }
+            } else {
+                formatted.append(c);
+            }
+        }
+        
+        return formatted.toString();
     }
 }
 

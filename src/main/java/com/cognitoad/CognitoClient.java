@@ -87,6 +87,80 @@ public class CognitoClient {
         return formatResponse(request, response);
     }
 
+    public String signUp(String clientId, String username, String password, String region) throws Exception {
+        return signUp(clientId, username, password, region, false);
+    }
+    
+    public String signUp(String clientId, String username, String password, String region, boolean forceAliasCreation) throws Exception {
+        String host = "cognito-idp." + region + ".amazonaws.com";
+        
+        // Create HTTP service
+        HttpService httpService = HttpService.httpService(host, 443, true);
+        
+        // Build JSON request body
+        StringBuilder requestBodyBuilder = new StringBuilder();
+        requestBodyBuilder.append("{\"ClientId\":\"").append(escapeJson(clientId))
+            .append("\",\"Username\":\"").append(escapeJson(username))
+            .append("\",\"Password\":\"").append(escapeJson(password)).append("\"");
+        
+        // Add ForceAliasCreation if enabled
+        if (forceAliasCreation) {
+            requestBodyBuilder.append(",\"ForceAliasCreation\":true");
+        }
+        
+        requestBodyBuilder.append("}");
+        String requestBody = requestBodyBuilder.toString();
+        
+        // Build HTTP request
+        StringBuilder requestBuilder = new StringBuilder();
+        requestBuilder.append("POST / HTTP/1.1\r\n");
+        requestBuilder.append("Host: ").append(host).append("\r\n");
+        requestBuilder.append("Content-Type: application/x-amz-json-1.1\r\n");
+        requestBuilder.append("X-Amz-Target: AWSCognitoIdentityProviderService.SignUp\r\n");
+        requestBuilder.append("Content-Length: ").append(requestBody.length()).append("\r\n");
+        requestBuilder.append("\r\n");
+        requestBuilder.append(requestBody);
+        
+        ByteArray requestBytes = ByteArray.byteArray(requestBuilder.toString().getBytes(StandardCharsets.UTF_8));
+        HttpRequest request = HttpRequest.httpRequest(httpService, requestBytes);
+        
+        // Send request using Burp's HTTP API
+        HttpResponse response = montoyaApi.http().sendRequest(request).response();
+        
+        // Format response
+        return formatResponse(request, response);
+    }
+
+    public String resendConfirmationCode(String clientId, String username, String region) throws Exception {
+        String host = "cognito-idp." + region + ".amazonaws.com";
+        
+        // Create HTTP service
+        HttpService httpService = HttpService.httpService(host, 443, true);
+        
+        // Build JSON request body
+        String requestBody = "{\"ClientId\":\"" + escapeJson(clientId) + 
+            "\",\"Username\":\"" + escapeJson(username) + "\"}";
+        
+        // Build HTTP request
+        StringBuilder requestBuilder = new StringBuilder();
+        requestBuilder.append("POST / HTTP/1.1\r\n");
+        requestBuilder.append("Host: ").append(host).append("\r\n");
+        requestBuilder.append("Content-Type: application/x-amz-json-1.1\r\n");
+        requestBuilder.append("X-Amz-Target: AWSCognitoIdentityProviderService.ResendConfirmationCode\r\n");
+        requestBuilder.append("Content-Length: ").append(requestBody.length()).append("\r\n");
+        requestBuilder.append("\r\n");
+        requestBuilder.append(requestBody);
+        
+        ByteArray requestBytes = ByteArray.byteArray(requestBuilder.toString().getBytes(StandardCharsets.UTF_8));
+        HttpRequest request = HttpRequest.httpRequest(httpService, requestBytes);
+        
+        // Send request using Burp's HTTP API
+        HttpResponse response = montoyaApi.http().sendRequest(request).response();
+        
+        // Format response
+        return formatResponse(request, response);
+    }
+
     private String formatUserAttributesJson(String inputJson) {
         // Simple JSON parsing - convert object to array format
         // Input: {"email": "user@example.com", "name": "John Doe"}

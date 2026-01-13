@@ -45,6 +45,33 @@ A dedicated repeater-style interface for testing user attribute updates with two
 - Click any result to view the full request and response
 - Helps identify which attribute combinations are accepted or rejected
 
+### JWT Decoder & Sign-Up Tester
+
+A comprehensive interface for decoding JWT tokens and testing AWS Cognito user sign-up functionality:
+
+#### JWT Token Decoding
+- **JWT Input** - Paste JWT tokens for decoding
+- **Automatic Decoding** - Decodes JWT payload (base64url) and displays formatted JSON
+- **Client ID Extraction** - Automatically extracts `client_id` or `clientId` from JWT payload
+- **Formatted Display** - Shows decoded payload in readable JSON format
+
+#### Sign-Up Testing
+- **Custom Email/Username** - Enter custom email addresses for sign-up testing (pre-populated with `cog_test@example.com`)
+- **Custom Password** - Enter custom passwords (visible plain text, default: `SuperSecure-123`)
+- **Force Alias Creation** - Radio button option to enable/disable `ForceAliasCreation` parameter
+- **Burp Collaborator Integration** - Generate Collaborator payloads and automatically append to email addresses
+  - Click "Generate Collaborator Payload" to create a payload
+  - Payload is automatically appended to the email field (replaces domain if `@` exists, otherwise appends)
+  - Check for Collaborator interactions to detect out-of-band callbacks
+- **OTP/Confirmation Code Request** - Request OTP codes after user creation using `ResendConfirmationCode` API
+- **Detailed Results** - View full request and response details including status codes and body content
+
+**Features:**
+- Pre-populated email field for quick testing
+- Automatic client ID extraction from JWT tokens
+- Real-time Collaborator interaction checking
+- All requests appear in Burp's HTTP history for inspection
+
 ### Identity Pool Tester
 
 A comprehensive security testing interface for AWS Cognito Identity Pools with the following tests:
@@ -106,6 +133,8 @@ CogniToad integrates with Burp Suite's Montoya API to provide a seamless interfa
 5. **Request Construction** - The extension constructs properly formatted AWS Cognito API requests:
    - `GetUser` requests to `AWSCognitoIdentityProviderService.GetUser`
    - `UpdateUserAttributes` requests to `AWSCognitoIdentityProviderService.UpdateUserAttributes`
+   - `SignUp` requests to `AWSCognitoIdentityProviderService.SignUp`
+   - `ResendConfirmationCode` requests to `AWSCognitoIdentityProviderService.ResendConfirmationCode`
    - `GetId` and `GetCredentialsForIdentity` for Identity Pool testing
    - `GetCallerIdentity` for STS testing
    - Service enumeration calls (S3, DynamoDB, Lambda)
@@ -144,6 +173,27 @@ CogniToad integrates with Burp Suite's Montoya API to provide a seamless interfa
 - Enter values in the right panel, one per line
 - Click "Start Brute Force" to test all combinations
 - Review results in the table, clicking any row to see full request/response details
+
+### Using JWT Decoder & Sign-Up Tester
+
+1. Navigate to the **CogniToad** tab > **JWT Decoder & Sign-Up Tester** sub-tab
+2. **Decode JWT Token:**
+   - Paste a JWT token in the "JWT Token" field
+   - Click "Decode JWT" to decode and display the payload
+   - The `client_id` will be automatically extracted and populated in the Client ID field
+3. **Test Sign-Up:**
+   - Enter or modify the email/username (default: `cog_test@example.com`)
+   - Enter or modify the password (default: `SuperSecure-123`)
+   - Select "Yes" or "No" for Force Alias Creation (default: No)
+   - Optionally click "Generate Collaborator Payload" to append a Collaborator payload to the email
+   - Click "Test Sign-Up" to attempt user creation
+   - Review the response in the "Sign-Up Result" area
+4. **Request OTP:**
+   - After a successful sign-up, click "Request OTP/Confirmation Code" to request a confirmation code
+   - The response will show delivery method and code details
+5. **Check Collaborator Interactions:**
+   - After using a Collaborator payload, click "Check Collaborator Interactions"
+   - View any out-of-band interactions that occurred (e.g., email verification callbacks)
 
 ### Using the Identity Pool Tester
 

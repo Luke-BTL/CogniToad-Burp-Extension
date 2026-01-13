@@ -30,6 +30,7 @@ public class CognitoTab {
     private final CognitoClient cognitoClient;
     private volatile boolean isRunning = false;
     private volatile boolean isBruteForcing = false;
+    private IdentityPoolTestPanel identityPoolTestPanel;
     
     private static final String[] AWS_REGIONS = {
         "us-east-1",      // US East (N. Virginia)
@@ -160,7 +161,25 @@ public class CognitoTab {
         JPanel repeaterTab = createRepeaterPanel();
         tabbedPane.addTab("Update Attributes Repeater", repeaterTab);
         
+        // Tab 3: Identity Pool Tester
+        JPanel identityPoolTestTab = createIdentityPoolTestPanel();
+        tabbedPane.addTab("Identity Pool Tester", identityPoolTestTab);
+        
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
+    }
+    
+    private JPanel createIdentityPoolTestPanel() {
+        identityPoolTestPanel = new IdentityPoolTestPanel(montoyaApi);
+        return identityPoolTestPanel.getPanel();
+    }
+    
+    /**
+     * Set the Identity Pool ID in the Identity Pool Tester tab
+     */
+    public void setIdentityPoolId(String poolId) {
+        if (identityPoolTestPanel != null) {
+            identityPoolTestPanel.setIdentityPoolId(poolId);
+        }
     }
 
     private JPanel createRepeaterPanel() {
